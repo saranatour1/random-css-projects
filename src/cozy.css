@@ -1,0 +1,176 @@
+/* Time of day: one fixed multiply layer, hidden in plain day so it costs nothing then. --lamp is 0 or 1. */
+:root {
+  --tint: #fff;
+  --lamp: 0;
+}
+[data-phase='morning'] {
+  --tint: #fff0de;
+}
+[data-phase='golden'] {
+  --tint: #ffdaa8;
+}
+[data-phase='evening'] {
+  --tint: #dcc4e6;
+  --lamp: 1;
+}
+[data-phase='night'] {
+  --tint: #8f9bd0;
+  --lamp: 1;
+}
+.tint {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background: var(--tint);
+}
+:root:not([data-phase]) .tint,
+[data-phase='day'] .tint {
+  display: none;
+}
+/* A lantern halo drawn with a gradient, not a blur. Size and place it; it shows only while the lamps are lit. */
+.glow {
+  pointer-events: none;
+  background: radial-gradient(closest-side, #ffd77ab0, #ffd77a00);
+  opacity: var(--lamp);
+}
+
+/* Ambience: six drifting cherry petals, only while [data-ambience='on'] is on the root. */
+.petals {
+  display: none;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+[data-ambience='on'] .petals {
+  display: block;
+}
+.petals i {
+  position: absolute;
+  top: -3vh;
+  left: var(--l);
+  width: 1.2vmin;
+  height: 0.8vmin;
+  border-radius: 100% 0;
+  background: #f7c2d3;
+  opacity: 0;
+  animation: cozy-petal var(--d) linear var(--w) infinite;
+}
+.petals i:nth-child(1) { --l: 6%; --d: 15s; --w: 0s; }
+.petals i:nth-child(2) { --l: 24%; --d: 19s; --w: -6s; }
+.petals i:nth-child(3) { --l: 41%; --d: 13s; --w: -3s; }
+.petals i:nth-child(4) { --l: 58%; --d: 21s; --w: -11s; }
+.petals i:nth-child(5) { --l: 73%; --d: 16s; --w: -8s; }
+.petals i:nth-child(6) { --l: 88%; --d: 18s; --w: -14s; }
+@keyframes cozy-petal {
+  8%,
+  88% {
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(-5vw, 55vh) rotate(280deg);
+  }
+  to {
+    transform: translate(12vw, 108vh) rotate(560deg);
+    opacity: 0;
+  }
+}
+
+/*
+ * One-shot feedback. cozy.ts once() adds the class and removes it on animationend.
+ * animation-composition: add appends to the element's own transform, so a billboard keeps facing the camera.
+ */
+.pop {
+  animation: cozy-pop 0.45s ease-out;
+  animation-composition: add;
+}
+@keyframes cozy-pop {
+  from,
+  to {
+    transform: translateY(0) scale(1, 1);
+  }
+  30% {
+    transform: translateY(-16%) scale(0.9, 1.12);
+  }
+  60% {
+    transform: translateY(0) scale(1.1, 0.9);
+  }
+}
+.rustle {
+  animation: cozy-rustle 0.6s ease-in-out;
+  animation-composition: add;
+}
+@keyframes cozy-rustle {
+  from,
+  to {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(4deg);
+  }
+  45% {
+    transform: rotate(-3deg);
+  }
+  70% {
+    transform: rotate(1.5deg);
+  }
+}
+/* --fx and --fy are the px offset from the element's start to its target, such as the basket. */
+.fly {
+  animation: cozy-fly 0.6s ease-in both;
+  animation-composition: add;
+}
+@keyframes cozy-fly {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  35% {
+    transform: translate(calc(var(--fx) * 0.25), calc(var(--fy) * 0.25 - 2em)) scale(1.15);
+  }
+  to {
+    transform: translate(var(--fx), var(--fy)) scale(0.5);
+    opacity: 0.4;
+  }
+}
+/* Three hearts from one glyph: the text-shadows are the other two. */
+.hearts::after {
+  content: '\2665';
+  position: absolute;
+  left: 50%;
+  bottom: 85%;
+  translate: -50%;
+  font: calc(var(--t, 48px) * 0.3) / 1 sans-serif;
+  color: #f27b9b;
+  text-shadow:
+    -0.8em 0.6em #f59ab2,
+    0.8em 0.35em #f27b9b;
+  pointer-events: none;
+  animation: cozy-hearts 0.9s ease-out both;
+}
+@keyframes cozy-hearts {
+  from {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    transform: translateY(-25%) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-140%) scale(1);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ambience='on'] .petals {
+    display: none;
+  }
+  .pop,
+  .rustle,
+  .fly,
+  .hearts::after {
+    animation: none;
+  }
+}

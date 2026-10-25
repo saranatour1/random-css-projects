@@ -1,0 +1,43 @@
+# Pocket Farm
+
+> Pocket Farm is a free, single-player, cozy farming game that runs in any web browser with no install or account. You walk an endless pixel-art world, plant carrots, turnips and wheat that grow on the real clock, fish two kinds of pond, shake fruit trees, mine rocks, craft and cook, sell at a shipping bin, fill orders and pet a corgi. The whole world is drawn with CSS 3D transforms on a fixed pool of DOM elements (no canvas, no WebGL), it does no work while idle, and progress saves in the browser's localStorage.
+
+## How to play
+
+Keyboard:
+
+- Arrow keys or W A S D: walk one cell per step. Hold to keep walking.
+- Shift + walk: plant the selected seed on every cell you step on.
+- Space or Enter: do the most useful thing here. In order: reel in a biting fish, pick a ripe crop, shake the tree / mine the rock / cast into the pond you face, plant on the cell you stand on. Facing the shipping bin, seed shop or orders board opens that panel. With nothing to do, you pet the corgi.
+- 1, 2, 3: choose carrot, turnip or wheat seeds.
+- 4: pick a placeable (fence, scarecrow, lantern, sprinkler) to place in the cell you face with Space. Press 4 again for the next one.
+- I: open the bag. C: open crafting. Escape closes a panel.
+- Q / E: turn the view a quarter turn left or right.
+- H: walk home.
+
+Pointer (mouse or touch):
+
+- Tap a cell: walk there along a path and plant or pick. Tap a tree, pond, rock or stall: walk beside it and use it. Tap your own cell: same as Space.
+- Drag across cells: plant a row.
+- Tap the corgi: pet it.
+- Buttons: minimap Home (H), ? for controls, sound, falling petals, rotate left and right, the hotbar seeds, the placeable slot and the Bag.
+
+## For agents
+
+- The game board is a focusable element with `role="application"` and `aria-label="Farm"` (selector `.board`, `tabindex="0"`). Focus it, then dispatch keyboard events. Key handlers listen on `window`, so `keydown` and `keyup` events with the `key` values below work from any focused element outside a button.
+- Keys you can dispatch: `ArrowUp` `ArrowDown` `ArrowLeft` `ArrowRight` (or `w` `a` `s` `d`), `' '` (Space) or `Enter`, `1` `2` `3` `4`, `q` `e`, `h`, `i` `c`, `Escape` inside a panel. Hold Shift (`shiftKey: true`) while walking to sow. Send a `keyup` after each `keydown`; repeated `keydown` events with `repeat: true` are ignored, and a step takes about 140 ms.
+- Movement keys are in screen terms: after Q or E rotates the view, Up still walks toward the top of the screen.
+- A polite `aria-live` region (`#say`) announces the cell under the farmer after each step, for example `Carrot: ripe, 2 east 1 south of home`, and the result of every action (`Picked a carrot`, `Blocked by pond`, `A bite! Press Space to reel in`). Inside the bag/shop panel the announcer is `#said`. Read these to know where you are and what happened.
+- Panels are native `<dialog>` elements with tabs (`bag`, `craft`, `shop`, `orders`, `journal`). Their buttons carry `data-sell`, `data-craft`, `data-buy`, `data-fulfil` and `data-pouch`. Game keys are ignored while a dialog is open.
+- Selling works only while standing next to the shipping bin. The bag hides Sell buttons elsewhere.
+- Home is cell (5, 4). The house, pond, shipping bin, seed shop, orders board and garden beds are all within a few cells of it.
+- Saves live in `localStorage` under `pocket-farm-3`, written at most once a second and on `pagehide`.
+
+## Docs
+
+- [Full rules](/llms-full.txt): every item, price, recipe, fish odds, growth timing, orders, save format and the performance design.
+
+## Optional
+
+- [Web app manifest](/site.webmanifest): name, colors and icons.
+- [Sitemap](/sitemap.xml): the game is a single page at `/`.

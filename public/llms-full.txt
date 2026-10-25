@@ -1,0 +1,141 @@
+# Pocket Farm: full rules
+
+> The complete rules of Pocket Farm, a free single-player farming game in the browser. Controls and agent notes are in /llms.txt. Every number here comes from the game's rule tables.
+
+## Start
+
+- You start with 10 coins and 3 seeds each of carrot, turnip and wheat.
+- Home is cell (5, 4) of a hand-made 12 by 9 patch at world (0, 0): a house, a home pond, oak, cherry and orange trees, a shipping bin, a seed shop, an orders board, and three 3 by 2 garden beds with fences below them.
+- Beyond the patch the world is endless and the same on every visit. Each wild cell is about 3% oak, 2% cherry tree, 1% orange tree, 2% rock, 6% wildflowers and 16% grass tufts; the rest is grass. Wild ponds fill the inner 2 by 2 of roughly one in seven 4 by 4 blocks.
+- Solid cells block walking: house, ponds, trees, rocks, fences, the three stalls, and anything you placed.
+
+## Farming
+
+- Plant on any soil cell: grass, grass tufts, wildflowers, dirt path or garden bed, if nothing is planted or placed there.
+- Each crop has three stages: seed, sprout, ripe. A stage lasts 4 seconds, so a crop is ripe 8 seconds after planting.
+- Crops grow on the real clock, also while the tab is closed. Coming back shows "Welcome back!" with what ripened while you were away.
+- A sprinkler doubles growth speed for the eight cells around it. Sprinklers do not stack. Placing one speeds up crops already planted there at once.
+- Picking a ripe crop gives one of that crop and empties the cell.
+
+## Gathering
+
+| Source | Verb | Gives |
+| --- | --- | --- |
+| Oak tree | shake | 1 wood |
+| Cherry tree | shake | 1 cherry |
+| Orange tree | shake | 1 orange |
+| Rock | mine | 1 stone |
+
+Each tree or rock then rests for 30 seconds ("Nothing more for now").
+
+## Fishing
+
+- Face a pond and press Space to cast. A fish bites after 1.5 to 4.5 seconds, chosen at random.
+- The bite lasts 1.2 seconds. Press Space during it to catch. Reeling earlier gives "Reeled in too soon". Missing the window gives "It got away".
+- The home pond is the one on the home patch. Every other pond is wild.
+
+| Fish | Home pond | Wild pond |
+| --- | --- | --- |
+| Minnow | 60% | 40% |
+| Carp | 30% | 35% |
+| Koi | 10% | 20% |
+| Golden koi | never | 5% |
+
+## Items and sell prices
+
+Sell at the shipping bin: stand next to it and open the bag (Space while facing it, or I).
+
+| Item | Kind | Sells for |
+| --- | --- | --- |
+| Carrot | crop | 15 |
+| Turnip | crop | 25 |
+| Wheat | crop | 10 |
+| Carrot seeds | seed | 2 |
+| Turnip seeds | seed | 4 |
+| Wheat seeds | seed | 1 |
+| Minnow | fish | 8 |
+| Carp | fish | 20 |
+| Koi | fish | 45 |
+| Golden koi | fish | 250 |
+| Cherry | fruit | 12 |
+| Orange | fruit | 14 |
+| Wood | material | 4 |
+| Stone | material | 4 |
+| Bread | food | 30 |
+| Fish stew | food | 70 |
+| Fruit tart | food | 40 |
+| Fence | placeable | 6 |
+| Scarecrow | placeable | 18 |
+| Lantern | placeable | 12 |
+| Sprinkler | placeable | 25 |
+
+## Seed shop
+
+Face the seed shop and press Space.
+
+| Seed | Price |
+| --- | --- |
+| Carrot seeds | 6 |
+| Turnip seeds | 10 |
+| Wheat seeds | 4 |
+
+The free seed pouch gives 2 of each seed once per day (days roll over at midnight UTC). It also opens any time you have no seeds and fewer than 4 coins, so the farm can never stall.
+
+## Crafting and cooking
+
+Open with C. "Any fish" and "any fruit" use your cheapest matching items first.
+
+| Makes | Needs |
+| --- | --- |
+| Bread | 2 wheat |
+| Fish stew | 1 any fish, 1 carrot, 1 turnip |
+| Fruit tart | 1 any fruit, 1 wheat |
+| Fence | 1 wood |
+| Scarecrow | 2 wood, 1 wheat |
+| Lantern | 1 stone, 1 wood |
+| Sprinkler | 2 stone, 2 wood |
+
+## Placeables
+
+Choose one with 4 (press again for the next), then press Space to place it in the cell you face. Placeables go on soil cells and block walking.
+
+- Fence and scarecrow: decoration.
+- Lantern: glows in the evening and at night.
+- Sprinkler: doubles growth for the eight cells around it.
+
+## Orders
+
+- The orders board always shows three orders. Each asks for 1 to 3 of one crop, fish (not the golden koi), fruit or food.
+- An order pays the item's sell price times the quantity, plus a bonus of 5 per item and 0, 5, 10 or 15 more.
+- A delivered order is replaced by the next one. The sequence of orders is fixed, so every farm sees the same orders in the same order.
+
+## Journal
+
+The journal tab counts every kind of item you have ever held, out of 21.
+
+## Time of day
+
+The light follows your local clock: morning from 6:00, day from 10:00, golden hour from 17:00, evening from 19:00 and night from 21:00. Lanterns light in the evening and at night.
+
+## The corgi
+
+The corgi follows you. Its name is one of Biscuit, Mochi, Pumpkin, Waffles, Peanut, Clover, Noodle, Maple, Dumpling or Toffee, fixed by the time of your first visit. Tap it, or press Space with nothing else to do, to pet it.
+
+## Saving
+
+- Everything saves in the browser's `localStorage` under `pocket-farm-3`: inventory, coins, plots with their planting times, tree and rock cooldowns, placed items, the pouch day, the journal, the three orders, your position, view rotation, selected seed, the corgi's name seed, the petals setting and when you left.
+- Writes happen at most once per second and again when the page is hidden or closed.
+- A cast fishing line is never saved.
+- Saves are validated on load. Malformed entries are dropped one by one, and timestamps from the future are pulled back to now. Older `pocket-farm-2` saves are upgraded.
+- Sound on or off is stored separately under `pocket-farm-sound`.
+- Clearing site data starts a fresh farm.
+
+## How it is built
+
+- One Astro page. No canvas, no WebGL, no image files: sprites are SVG strings generated at build time into CSS custom properties.
+- The world is a tilted CSS 3D plane. A fixed pool of 29 by 29 ground cells plus one upright slot per cell is repainted for the camera, so the DOM stays the same size however far you roam. The minimap is a 15 by 15 pool.
+- Walking moves the camera one cell and slides the world back with a single Web Animation (FLIP), 140 ms per step.
+- The house is drawn only while it overlaps the window.
+- Zero work while idle: no requestAnimationFrame loop and no polling. The only timers are one for the next crop stage change on screen, one while a fishing line is out, one for the next time-of-day boundary, a one-second save debounce and a two-second sound suspend. One-shot animations remove themselves when they end, and the falling petals can be turned off.
+- Sound effects are synthesized with the Web Audio API. There are no audio files.
+- `prefers-reduced-motion` turns off the slides and pops.

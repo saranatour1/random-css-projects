@@ -1,0 +1,77 @@
+---
+// Everything the page's <head> needs for search engines, link previews (X, Reddit, Discord, Slack, iMessage all read
+// Open Graph), installable-app metadata and agents. Absolute URLs come from `site` in astro.config.mjs.
+interface Props {
+	title?: string
+	description?: string
+	path?: string
+	image?: string
+	imageAlt?: string
+}
+
+const {
+	title = 'Pocket Farm: a cozy infinite farm made of pure CSS 3D',
+	description = 'Plant carrots, turnips and wheat that grow on the real clock, fish, forage, cook, fill orders and pet the corgi on an endless pixel-art farm. Free in the browser, no install. Built with CSS 3D transforms only: no canvas, no WebGL.',
+	path = '/',
+	image = '/og.png',
+	imageAlt = 'Pocket Farm: a tilted pixel-art farm with ripe carrots, turnips and wheat beside a cottage and a pond.',
+} = Astro.props
+
+if (!Astro.site) throw new Error('Seo.astro needs `site` in astro.config.mjs for absolute URLs')
+const url = new URL(path, Astro.site).href
+const img = new URL(image, Astro.site).href
+const name = 'Pocket Farm'
+const themeColor = '#8cc66a'
+
+const jsonLd = {
+	'@context': 'https://schema.org',
+	'@type': ['VideoGame', 'WebApplication'],
+	name,
+	description,
+	url,
+	image: img,
+	genre: ['Farming simulation', 'Cozy game', 'Casual'],
+	gamePlatform: 'Web browser',
+	applicationCategory: 'Game',
+	operatingSystem: 'Any',
+	playMode: 'SinglePlayer',
+	isAccessibleForFree: true,
+	inLanguage: 'en',
+	offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD' },
+	accessMode: ['visual', 'auditory', 'textual'],
+	accessModeSufficient: ['visual', 'textual'],
+	accessibilityControl: ['fullKeyboardControl', 'fullMouseControl', 'fullTouchControl'],
+	accessibilityFeature: ['ARIA', 'readingOrder'],
+	accessibilitySummary:
+		'Play with the keyboard (arrows or WASD, Space, Q/E, H), mouse or touch (tap to walk and act, drag to plant). A polite live region announces the cell under the farmer.',
+}
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={url} />
+<meta name="theme-color" content={themeColor} />
+<meta name="color-scheme" content="light" />
+<link rel="manifest" href="/site.webmanifest" />
+<link rel="alternate" type="text/markdown" href="/llms.txt" title="Pocket Farm for agents (llms.txt)" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content={name} />
+<meta property="og:locale" content="en_US" />
+<meta property="og:url" content={url} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={img} />
+<meta property="og:image:secure_url" content={img} />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content={imageAlt} />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={img} />
+<meta name="twitter:image:alt" content={imageAlt} />
+
+<script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />

@@ -1,16 +1,791 @@
 ---
+import { CX, CY, HOUSE, LEGEND, MAP, MW, VH, VW, W } from '../map'
+import { sprite, SPRITES } from '../sprites'
+import { IDS, ITEMS, PLACEABLES, RECIPES, SEEDS, SHOP, type Ingredient, type RecipeId } from '../items'
+import { ITEM_PAL, ITEM_SPRITES } from '../item-sprites'
+
+MAP.forEach((row, y) => {
+	for (const m of row) if (row.length !== W || !LEGEND[m]) throw new Error(`map row ${y} is malformed at "${m}"`)
+})
+
+// The fixed pool: one flat cell and one upright slot per window cell, repainted by the script for any camera.
+const pool = Array.from({ length: VW * VH }, (_, k) => ({ x: k % VW, y: (k / VW) | 0 }))
+const items = IDS.map((id) => `--i-${id}:${sprite(ITEM_SPRITES[id], ITEM_PAL)}`)
+const sprites = `:root{${[...Object.entries(SPRITES).map(([k, v]) => `--${k}:${v}`), ...items].join(';')}}`
+const img = (id: string) => `background-image:var(--i-${id})`
+const TABS = ['bag', 'craft', 'shop', 'orders', 'journal']
+const need = (r: RecipeId) =>
+	(RECIPES[r] as readonly Ingredient[]).map((g) => `${g.n} ${'item' in g ? ITEMS[g.item].name.toLowerCase() : `any ${g.tag}`}`).join(', ')
 ---
 
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
+		<title>Pocket Farm</title>
+		<style is:inline set:html={sprites} />
 	</head>
 	<body>
-		<h1>Astro</h1>
+		<main style="--r:0">
+			<h1 class="sr">Pocket Farm</h1>
+			<nav class="map" aria-label="Map">
+				<div class="mini" aria-hidden="true">
+					{Array.from({ length: MW * MW }, (_, k) => <i class={k === (MW * MW - 1) / 2 ? 'me' : undefined} />)}
+					<b class="pin" hidden />
+				</div>
+				<button id="home" aria-label="Walk home (H)">⌂ <span /></button>
+			</nav>
+			<div class="corner tr">
+				<button id="ask" aria-label="Controls">?</button>
+				<button id="mute" aria-label="Sound" aria-pressed="true">♪</button>
+				<button id="petal" aria-label="Petals" aria-pressed="true">❀</button>
+			</div>
+			<button class="corner bl" data-turn="-1" aria-label="Rotate left (Q)">⟲</button>
+			<button class="corner br" data-turn="1" aria-label="Rotate right (E)">⟳</button>
+			<div class="hud">
+				<ul class="basket" aria-label="Hotbar">
+					{SEEDS.map((id, i) => (
+						<li>
+							<button data-seed={i} aria-pressed={String(i === 0)} aria-label={`${ITEMS[id].name} (${i + 1})`} style={img(id)} />
+							<b>0</b>
+						</li>
+					))}
+					<li>
+						<button id="tool" aria-pressed="false" aria-label="Fence (4)" style={img(PLACEABLES[0])} />
+						<b>0</b>
+					</li>
+					<li class="coins" aria-label="Coins"><i /><b>0</b></li>
+					<li><button id="bag" aria-label="Bag (I)">Bag</button></li>
+				</ul>
+			</div>
+			<div class="stage">
+				<div class="board" tabindex="0" role="application" aria-label="Farm" aria-describedby="keys">
+					<div class="world">
+						<div class="ground" style={`--vw:${VW}`}>
+							{pool.map(({ x, y }) => <i class={x === CX && y === CY ? 'here' : undefined} />)}
+						</div>
+						{pool.map(({ x, y }) => <i class="u" style={`--x:${x};--y:${y}`} />)}
+						<div class="house" style={`--hw:${HOUSE.w};--hd:${HOUSE.h}`} hidden>
+							<i class="hf" /><i class="hb" /><i class="hl" /><i class="hr" /><i class="rf" /><i class="rb" />
+						</div>
+					</div>
+					<i class="u walker" id="dog" style={`--x:${CX};--y:${CY};--dx:1;--dy:0;--img:var(--corgi)`} />
+					<i class="u walker" id="farmer" style={`--x:${CX};--y:${CY};--img:var(--farmer)`} />
+				</div>
+			</div>
+			<p id="say" class="sr" aria-live="polite"></p>
+			<dialog id="help" aria-labelledby="help-t">
+				<h2 id="help-t">Controls</h2>
+				<ul id="keys">
+					<li>Arrows or WASD: walk (hold to keep walking)</li>
+					<li>Shift + walk: plant every cell you step on</li>
+					<li>Space: plant, pick, fish, shake a tree, mine a rock, or use what you face</li>
+					<li>1 2 3: choose a seed. 4: place an item (press again to switch)</li>
+					<li>I: bag. C: crafting</li>
+					<li>Q / E: turn the view</li>
+					<li>H: walk home</li>
+					<li>Tap: walk there and plant, fish or shake. Drag: plant a row</li>
+				</ul>
+				<form method="dialog"><button>Got it</button></form>
+			</dialog>
+			<dialog id="panel" aria-label="Bag">
+				<div role="tablist">
+					{TABS.map((t) => <button role="tab" data-tab={t} aria-selected="false">{t}</button>)}
+				</div>
+				<section data-pane="bag" role="tabpanel">
+					<p class="note">Stand at the shipping bin to sell.</p>
+					<ul class="grid">
+						{IDS.map((id) => (
+							<li data-item={id} hidden>
+								<i style={img(id)} />{ITEMS[id].name} <b>0</b>
+								<button data-sell={id} aria-label={`Sell ${ITEMS[id].name} for ${ITEMS[id].price} coins`}>Sell {ITEMS[id].price}c</button>
+							</li>
+						))}
+					</ul>
+				</section>
+				<section data-pane="craft" role="tabpanel" hidden>
+					<ul class="rows">
+						{(Object.keys(RECIPES) as RecipeId[]).map((r) => (
+							<li><i style={img(r)} /><span>{ITEMS[r].name}<small>{need(r)}</small></span><button data-craft={r} aria-label={`Make ${ITEMS[r].name}`}>Make</button></li>
+						))}
+					</ul>
+				</section>
+				<section data-pane="shop" role="tabpanel" hidden>
+					<ul class="rows">
+						{SEEDS.map((id) => (
+							<li><i style={img(id)} /><span>{ITEMS[id].name}</span><button data-buy={id} aria-label={`Buy ${ITEMS[id].name} for ${SHOP[id]} coins`}>Buy {SHOP[id]}c</button></li>
+						))}
+						<li><span>Free seed pouch, once a day</span><button data-pouch>Open</button></li>
+					</ul>
+				</section>
+				<section data-pane="orders" role="tabpanel" hidden>
+					<ul class="rows">
+						{[0, 1, 2].map((i) => <li><i /><span /><button data-fulfil={i} aria-label={`Deliver order ${i + 1}`}>Deliver</button></li>)}
+					</ul>
+				</section>
+				<section data-pane="journal" role="tabpanel" hidden>
+					<p class="note"><b>0</b> of {IDS.length} discovered</p>
+					<ul class="grid">
+						{IDS.map((id) => <li data-j={id}><i style={img(id)} /><span>{ITEMS[id].name}</span></li>)}
+					</ul>
+				</section>
+				<p id="said" aria-live="polite"></p>
+				<form method="dialog"><button>Close</button></form>
+			</dialog>
+		</main>
+		<div class="petals" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
+		<div class="tint"></div>
+		<script>
+			import '../cozy.css'
+			import '../farm.ts'
+		</script>
 	</body>
 </html>
+
+<style is:global>
+	:root {
+		/* Sized so the 27-cell window reaches past every screen edge at this tilt and perspective. */
+		--t: max(5.15vw, 8vh);
+		--tilt: 50deg;
+		--ease: cubic-bezier(0.6, 0, 0.3, 1);
+		--grass: #8cc66a;
+		--dirt: radial-gradient(#b0824e 18%, #0000 22%) 0 0 / 50% 50%, #c99c66;
+		color: #4b3a2f;
+		font-family: system-ui, sans-serif;
+	}
+	body {
+		margin: 0;
+		overflow: hidden;
+		background: var(--grass);
+	}
+	.sr {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+	.hud,
+	.map,
+	.corner {
+		position: fixed;
+		z-index: 1;
+	}
+	.hud {
+		bottom: 12px;
+		left: 50%;
+		translate: -50%;
+	}
+	.corner {
+		margin: 12px;
+	}
+	.tr {
+		top: 0;
+		right: 0;
+		display: grid;
+		gap: 8px;
+	}
+	main [aria-pressed='false']:is(#mute, #petal) {
+		opacity: 0.45;
+	}
+	.bl {
+		bottom: 0;
+		left: 0;
+	}
+	.br {
+		bottom: 0;
+		right: 0;
+	}
+	main button {
+		flex: none;
+		width: 44px;
+		height: 44px;
+		border: 0;
+		border-radius: 50%;
+		background: center / 60% no-repeat #fffaf0;
+		box-shadow: 0 2px 6px #6b4a3533;
+		color: inherit;
+		font-size: 1.4rem;
+		cursor: pointer;
+	}
+	.basket {
+		display: flex;
+		gap: 10px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 1.1rem;
+	}
+	.basket li {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 3.4em;
+	}
+	.basket [aria-pressed='true'] {
+		box-shadow: 0 0 0 3px #e8964a;
+	}
+	.coins i {
+		width: 18px;
+		height: 18px;
+		border-radius: 50%;
+		background: radial-gradient(#f5d26b 45%, #c99a3a 50%);
+	}
+	#bag {
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+	/* Phones: a tighter hotbar that sits above the rotate buttons. */
+	@media (max-width: 520px) {
+		.hud {
+			bottom: 64px;
+		}
+		.basket {
+			gap: 4px;
+			padding: 6px 8px;
+			font-size: 1rem;
+		}
+		.basket li {
+			min-width: 0;
+			gap: 3px;
+		}
+		.basket button {
+			width: 36px;
+			height: 36px;
+		}
+	}
+	.map {
+		top: 10px;
+		left: 50%;
+		translate: -50%;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.map,
+	.basket {
+		padding: 6px 10px;
+		border-radius: 18px;
+		background: #fffaf0d0;
+	}
+	#home {
+		width: auto;
+		min-width: 44px;
+		padding: 0 10px;
+		border-radius: 22px;
+		font-size: 1rem;
+	}
+	.mini {
+		--c: 6px;
+		position: relative;
+		display: grid;
+		grid-template-columns: repeat(15, var(--c));
+		grid-auto-rows: var(--c);
+		border-radius: 6px;
+		overflow: hidden;
+		rotate: calc(var(--r) * 90deg);
+		background: #8cc66a;
+	}
+	[data-k='~'],
+	[data-k='k'] {
+		background: #6bb6d4;
+	}
+	[data-k='T'],
+	[data-k='O'] {
+		background: #467d32;
+	}
+	[data-k='K'] {
+		background: #d0789c;
+	}
+	[data-k=','],
+	[data-k='o'] {
+		background: #d8b07c;
+	}
+	[data-k='H'],
+	[data-k='X'],
+	[data-k='P'],
+	[data-k='B'] {
+		background: #b0603a;
+	}
+	[data-k='b'] {
+		background: #80543a;
+	}
+	[data-k='p'] {
+		background: #e8964a;
+	}
+	[data-k='r'],
+	[data-k='f'] {
+		background: #8a7a68;
+	}
+	.mini .me {
+		border-radius: 50%;
+		background: #fff;
+		box-shadow: 0 0 0 1.5px #4b3a2f;
+	}
+	.pin {
+		position: absolute;
+		left: calc((var(--px) + 0.5) * var(--c) - 5px);
+		top: calc((var(--py) + 0.5) * var(--c) - 5px);
+		width: 10px;
+		height: 10px;
+		background: #d9533f;
+		clip-path: polygon(50% 0, 100% 45%, 85% 45%, 85% 100%, 15% 100%, 15% 45%, 0 45%);
+		rotate: var(--pa, 0deg);
+	}
+	.pin[data-far] {
+		clip-path: polygon(50% 0, 100% 100%, 50% 75%, 0 100%);
+	}
+	#help {
+		max-width: 22rem;
+		border: 0;
+		border-radius: 16px;
+		background: #fffaf0;
+		color: inherit;
+	}
+	#help ul {
+		padding-left: 1.2em;
+		line-height: 1.6;
+	}
+	dialog form button,
+	#panel li button,
+	[role='tab'] {
+		width: auto;
+		padding: 0 20px;
+		border-radius: 22px;
+		font: inherit;
+	}
+	#panel {
+		width: min(30rem, calc(100vw - 32px));
+		max-height: calc(100dvh - 48px);
+		box-sizing: border-box;
+		border: 0;
+		border-radius: 16px;
+		background: #fffaf0;
+		color: inherit;
+	}
+	[role='tablist'] {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	#panel [role='tab'] {
+		height: 36px;
+		padding: 0 12px;
+		text-transform: capitalize;
+	}
+	#panel [aria-selected='true'] {
+		box-shadow: 0 0 0 3px #e8964a;
+	}
+	#panel ul {
+		margin: 12px 0;
+		padding: 0;
+		list-style: none;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+		gap: 6px;
+	}
+	.grid li,
+	.rows li {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px;
+		border-radius: 10px;
+		background: #f4ead6;
+	}
+	.grid li {
+		flex-wrap: wrap;
+	}
+	#panel [hidden] {
+		display: none;
+	}
+	.rows li {
+		margin-bottom: 6px;
+	}
+	.rows span {
+		flex: 1;
+	}
+	.rows small {
+		display: block;
+		opacity: 0.7;
+	}
+	#panel i {
+		flex: none;
+		width: 32px;
+		height: 32px;
+		background: center / contain no-repeat;
+		image-rendering: pixelated;
+	}
+	#panel li button {
+		height: 32px;
+		padding: 0 12px;
+		font-size: 0.85rem;
+	}
+	#panel button:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+	[data-sell] {
+		display: none;
+	}
+	[data-bin] [data-sell] {
+		display: block;
+	}
+	[data-bin] .note {
+		visibility: hidden;
+	}
+	.flyer {
+		position: fixed;
+		z-index: 2;
+		width: 32px;
+		height: 32px;
+		background: center / contain no-repeat;
+		pointer-events: none;
+	}
+	[data-j]:not([data-found]) {
+		opacity: 0.35;
+	}
+
+	.stage {
+		position: fixed;
+		inset: 0;
+		perspective: calc(var(--t) * 32);
+		overflow: clip;
+		touch-action: none;
+	}
+	/* The window is wider than the screen; centering it puts the farmer's cell at the vanishing point. */
+	.board {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		translate: -50% -50%;
+		transform-style: preserve-3d;
+		transform: rotateX(var(--tilt)) rotateZ(calc(var(--r) * 90deg));
+	}
+	/* The board reaches past every screen edge, so a focus ring could never be seen; painting one costs a board-sized
+	   layer and hides the ground from hit testing. The farmer's highlighted cell shows where keys act. */
+	.board:focus {
+		outline: none;
+	}
+	.board[data-ready] {
+		transition: transform 0.7s var(--ease);
+	}
+	.world {
+		transform-style: preserve-3d;
+	}
+
+	/* Flat cells live in one flat grid, not in the 3D tree, so they all paint into a single layer. */
+	.ground {
+		display: grid;
+		grid-template-columns: repeat(var(--vw), var(--t));
+		grid-auto-rows: var(--t);
+	}
+	:where(.ground) i {
+		border: 0 solid #b9b2a0;
+		background: #8cc66a;
+		cursor: pointer;
+	}
+	[data-m='"'] {
+		background:
+			linear-gradient(#6aa84c 0 0) 30% 40% / 7% 18% no-repeat,
+			linear-gradient(#6aa84c 0 0) 40% 32% / 7% 26% no-repeat,
+			linear-gradient(#6aa84c 0 0) 50% 40% / 7% 18% no-repeat,
+			#8cc66a;
+	}
+	[data-m='*'] {
+		background:
+			radial-gradient(#f4a9c4 0 9%, #0000 11%) 10% 20% / 50% 50%,
+			radial-gradient(#fbf4e6 0 8%, #0000 10%) 60% 70% / 50% 50%,
+			#8cc66a;
+	}
+	[data-m=','],
+	[data-m='H'] {
+		background: var(--dirt);
+	}
+	[data-m='o'] {
+		background:
+			radial-gradient(closest-side, #d3cebf 72%, #9d9787 76% 94%, #0000) center / 80% 66% no-repeat,
+			var(--dirt);
+	}
+	[data-m='r'] {
+		background:
+			radial-gradient(closest-side at 45% 40%, #c4beb0 30%, #9a9486 60%, #6f6a5f 88%, #0000) center / 84% 78% no-repeat,
+			#8cc66a;
+	}
+	[data-m='~'] {
+		background: radial-gradient(#fff6 10%, #0000 13%) 20% 30% / 60% 60%, #6bb6d4;
+	}
+	[data-m='k'] {
+		background: var(--koi) center / 72% auto no-repeat, #6bb6d4;
+	}
+	[data-m='b'],
+	[data-p] {
+		background: repeating-linear-gradient(#80543a 0 18%, #6a432b 0 25%);
+	}
+	[data-e*='n'] {
+		border-top-width: calc(var(--t) * 0.14);
+	}
+	[data-e*='e'] {
+		border-right-width: calc(var(--t) * 0.14);
+	}
+	[data-e*='s'] {
+		border-bottom-width: calc(var(--t) * 0.14);
+	}
+	[data-e*='w'] {
+		border-left-width: calc(var(--t) * 0.14);
+	}
+	[data-e*='n'][data-e*='w'] {
+		border-top-left-radius: 45%;
+	}
+	[data-e*='n'][data-e*='e'] {
+		border-top-right-radius: 45%;
+	}
+	[data-e*='s'][data-e*='w'] {
+		border-bottom-left-radius: 45%;
+	}
+	[data-e*='s'][data-e*='e'] {
+		border-bottom-right-radius: 45%;
+	}
+	.ground i:hover,
+	.here {
+		box-shadow: inset 0 0 0 calc(var(--t) * 0.08) #fffbe6c0;
+	}
+
+	/* Uprights: billboards standing on their cell's center line that undo the board's spin and tilt to face the camera. */
+	.u {
+		--w: 1;
+		--h: calc(var(--t) * 14 / 12);
+		position: absolute;
+		left: calc((var(--x) + 0.5 - var(--w) / 2) * var(--t));
+		top: calc((var(--y) + 0.5) * var(--t) - var(--h));
+		width: calc(var(--w) * var(--t));
+		height: var(--h);
+		background: center bottom / 100% 100% no-repeat;
+		transform-origin: bottom;
+		transform: rotateZ(calc(var(--r) * -90deg)) rotateX(calc(-1 * var(--tilt)));
+		pointer-events: none;
+	}
+	.u:not([data-u], .walker) {
+		display: none;
+	}
+	[data-turning] .u {
+		transition: transform 0.7s var(--ease);
+	}
+	[data-u$='1'],
+	[data-u$='2'],
+	[data-u$='3'] {
+		pointer-events: auto;
+		cursor: pointer;
+	}
+	[data-u$='1'] {
+		background-image: var(--seed);
+	}
+	[data-u$='2'] {
+		background-image: var(--sprout);
+	}
+	[data-u='c3'] {
+		background-image: var(--carrot);
+	}
+	[data-u='t3'] {
+		background-image: var(--turnip);
+	}
+	[data-u='w3'] {
+		background-image: var(--wheat);
+	}
+	[data-u='T'],
+	[data-u='K'],
+	[data-u='O'] {
+		--w: 2;
+		--h: calc(var(--t) * 8 / 3);
+		background-image: var(--oak);
+	}
+	[data-u='K'] {
+		background-image: var(--cherry);
+	}
+	[data-u='O'] {
+		background-image: var(--orange);
+	}
+	/* Fences stand on their cell's center line in board space, so they turn with the board instead of facing the camera. */
+	[data-u='f'] {
+		--h: calc(var(--t) * 0.5);
+		transform: rotateX(-90deg);
+		background:
+			linear-gradient(#0000 18%, #c08a52 18% 36%, #0000 36% 58%, #c08a52 58% 76%, #0000 76%),
+			repeating-linear-gradient(90deg, #8a5a32 0 calc(var(--t) * 0.12), #0000 0 calc(var(--t) * 0.5));
+	}
+	[data-u='X'],
+	[data-u='P'],
+	[data-u='B'] {
+		--w: 1.1;
+		--h: calc(var(--t) * 1.2);
+		background-image: var(--bin);
+	}
+	[data-u='P'] {
+		background-image: var(--shop);
+	}
+	[data-u='B'] {
+		background-image: var(--board);
+	}
+	[data-u='scarecrow'],
+	[data-u='lantern'],
+	[data-u='sprinkler'] {
+		--h: var(--t);
+		background-image: var(--i-scarecrow);
+	}
+	[data-u='lantern'] {
+		background-image: var(--i-lantern);
+	}
+	[data-u='sprinkler'] {
+		background-image: var(--i-sprinkler);
+	}
+	/* A lit lantern's halo is a gradient, not a blur; --lamp is 1 only in the evening and at night. */
+	[data-u='lantern']::after {
+		content: '';
+		position: absolute;
+		inset: -60%;
+		background: radial-gradient(closest-side, #ffd77ab0, #ffd77a00);
+		opacity: var(--lamp);
+	}
+	/* The bobber floats while waiting; at a bite it sits low in a ring of ripples. */
+	[data-u='bob'],
+	[data-u='bite'] {
+		--h: calc(var(--t) * 0.5);
+		background:
+			radial-gradient(circle at 50% 45%, #d9533f 0 12%, #fbf4e6 13% 20%, #0000 21%),
+			radial-gradient(50% 18% at 50% 88%, #fff9 0 60%, #0000 64%);
+	}
+	[data-u='bite'] {
+		background:
+			radial-gradient(circle at 50% 78%, #d9533f 0 10%, #0000 11%),
+			radial-gradient(60% 22% at 50% 84%, #0000 50%, #fffc 54% 64%, #0000 68%),
+			radial-gradient(85% 32% at 50% 84%, #0000 66%, #fff8 70% 78%, #0000 82%);
+	}
+	.walker {
+		--h: calc(var(--t) * 4 / 3);
+		/* A nudge toward the camera so a walker never z-fights the crop on its cell. */
+		transform: rotateZ(calc(var(--r) * -90deg)) rotateX(calc(-1 * var(--tilt))) translateZ(2px);
+	}
+	.walker::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: var(--img) center bottom / 100% 100% no-repeat;
+	}
+	.walker[data-f='l']::before {
+		scale: -1 1;
+	}
+	#dog {
+		pointer-events: auto;
+		cursor: pointer;
+		--w: 0.8;
+		--h: calc(var(--t) * 0.6);
+		translate: calc(var(--dx) * var(--t)) calc(var(--dy) * var(--t));
+	}
+	[data-ready] .walker {
+		transition:
+			transform 0.7s var(--ease),
+			translate 0.14s linear;
+	}
+	/* A small bob while walking only, so the page is still at rest. */
+	[data-walking] #farmer::before {
+		animation: bob 0.14s ease-in-out infinite alternate;
+	}
+	@keyframes bob {
+		to {
+			translate: 0 -4%;
+		}
+	}
+
+	/* House: a static box of four walls (side walls carry the gables) and two 45deg roof planes. */
+	.house {
+		--hh: calc(var(--t) * 1.5);
+		--rise: calc(var(--hd) * var(--t) / 2);
+		--eave: calc(var(--t) * 0.22);
+		position: absolute;
+		left: calc(var(--hx) * var(--t));
+		top: calc(var(--hy) * var(--t));
+		width: calc(var(--hw) * var(--t));
+		height: calc(var(--hd) * var(--t));
+		transform-style: preserve-3d;
+		pointer-events: none;
+	}
+	.house i {
+		position: absolute;
+		backface-visibility: hidden;
+		background: repeating-linear-gradient(var(--a, 0deg), #b07a48 0 calc(var(--t) * 0.2), #93603a 0 calc(var(--t) * 0.23));
+	}
+	.hf,
+	.hb {
+		left: 0;
+		right: 0;
+		height: var(--hh);
+	}
+	.house .hf {
+		bottom: 0;
+		transform-origin: bottom;
+		transform: rotateX(-90deg);
+		background:
+			linear-gradient(#5a3722 0 0) 66% 100% / 20% 72% no-repeat,
+			linear-gradient(#cfeaf2 0 0) 16% 45% / 14% 30% no-repeat,
+			linear-gradient(#5a3722 0 0) 15% 42% / 19% 40% no-repeat,
+			linear-gradient(#cfeaf2 0 0) 96% 45% / 10% 30% no-repeat,
+			linear-gradient(#5a3722 0 0) 97% 42% / 14% 40% no-repeat,
+			repeating-linear-gradient(#b07a48 0 calc(var(--t) * 0.2), #93603a 0 calc(var(--t) * 0.23));
+	}
+	.hb {
+		top: 0;
+		transform-origin: top;
+		transform: rotateX(90deg);
+	}
+	.hl,
+	.hr {
+		--a: 90deg;
+		top: 0;
+		bottom: 0;
+		width: calc(var(--hh) + var(--rise));
+	}
+	.hl {
+		left: 0;
+		transform-origin: left;
+		transform: rotateY(-90deg);
+		clip-path: polygon(0 0, var(--hh) 0, 100% 50%, var(--hh) 100%, 0 100%);
+	}
+	.hr {
+		right: 0;
+		transform-origin: right;
+		transform: rotateY(90deg);
+		clip-path: polygon(100% 0, calc(100% - var(--hh)) 0, 0 50%, calc(100% - var(--hh)) 100%, 100% 100%);
+	}
+	.house .rf,
+	.house .rb {
+		left: calc(var(--t) * -0.25);
+		right: calc(var(--t) * -0.25);
+		height: calc(var(--rise) * 1.4142 + var(--eave) * 1.4142);
+		background:
+			linear-gradient(var(--a, 0deg), #9c6a28 0 7%, #0000 0 92%, #b98436 0),
+			repeating-linear-gradient(var(--a, 0deg), #e8bb62 0 calc(var(--t) * 0.16), #cf9a45 0 calc(var(--t) * 0.22));
+	}
+	.rf {
+		bottom: calc(-1 * var(--eave));
+		transform-origin: bottom;
+		transform: translateZ(calc(var(--hh) - var(--eave))) rotateX(-45deg);
+	}
+	.rb {
+		--a: 180deg;
+		top: calc(-1 * var(--eave));
+		transform-origin: top;
+		transform: translateZ(calc(var(--hh) - var(--eave))) rotateX(45deg);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		::before {
+			transition: none !important;
+			animation: none !important;
+		}
+	}
+</style>
